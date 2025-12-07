@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nike TN Showcase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body class="bg-zinc-950 overflow-hidden">
+
+    <div id="loading-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-1000">
+        <div class="w-64 bg-zinc-800 h-1 rounded-full overflow-hidden">
+            <div id="progress-bar" class="h-full bg-red-600 transition-all duration-300 w-0"></div>
+        </div>
+        <p class="mt-4 text-zinc-400 text-xs tracking-widest uppercase" id="loading-percent">0% LOADED</p>
+    </div>
+
+    <div class="absolute top-8 left-8 z-10 text-white pointer-events-none">
+        <h1 class="text-4xl font-black italic tracking-tighter uppercase leading-none">Nike TN <span class="text-red-600">Red</span></h1>
+        <p class="text-zinc-500 text-sm mt-2 font-mono">18.2 MB OPTIMIZED VIEWER</p>
+    </div>
+
+    <canvas id="webgl" class="w-full h-full block"></canvas>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'; // Added for compression handling
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+        const scene = new THREE.Scene();
+        const canvas = document.querySelector('#webgl');
+
+        // Renderer with exposure tuning for high-gloss materials
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+
+        const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 100);
+        camera.position.set(4, 2, 4);
+
+        const controls = new OrbitControls(camera, canvas);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+
+        // DRACO DECODER SETUP 
+        // Note: Draco requires external workers, standard glb works without this
+        // but this prepares the script if you compress the file later.
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+
+        const loader = new GLTFLoader();
+        loader.setDRACOLoader(dracoLoader);
+
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('loading-percent');
+        const screen = document.getElementById('loading-screen');
+
+        loader.load(
+            'nike_tn_red.glb', 
+            (gltf) => {
+                const model = gltf.scene;
+                
+                // Automatically scale model based on bounding box
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 1.5 / maxDim; // Normalize scale
+                model.scale.set(scale, scale, scale);
+                
+                scene.add(model);
+                
+                // Fade out loader
+                screen.style.opacity = '0';
+                setTimeout(() => screen.remove(), 1000);
+            },
+            (xhr) => {
+                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                progressBar.style.width = percent + '%';
+                progressText.innerText = percent + '% LOADED';
+            }
+        );
+
+        // Lighting
+        new RGBELoader()
+            .setPath('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/')
+            .load('venice_sunset_1k.hdr', (texture) => {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.environment = texture;
+            });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
